@@ -311,7 +311,7 @@ int main(void)
   MX_USART2_UART_Init();
   MX_DAC_Init();
   MX_ADC3_Init();
-  MX_TIM2_Init();
+  //MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
 
   RC5_Init();
