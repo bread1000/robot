@@ -383,8 +383,8 @@ void RC5_Init(void)
 
   htim2.Init.ClockDivision = 0;
   htim2.Init.CounterMode = 0;
-  htim2.Init.Period = RC5TimeOut;
-  htim2.Init.Prescaler = 79;
+  htim2.Init.Period = 79;
+  htim2.Init.Prescaler = 0;
   htim2.Init.RepetitionCounter = 0;
   HAL_TIM_IC_Init(&htim2);
 

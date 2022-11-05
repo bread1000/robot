@@ -293,7 +293,6 @@ int main(void)
 
   /* USER CODE BEGIN Init */
 
-  RC5_Init();
   //uint32_t DAC_OUT[100];
 
   /* USER CODE END Init */
@@ -314,6 +313,8 @@ int main(void)
   MX_ADC3_Init();
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
+
+  RC5_Init();
 
   HAL_ADC_Start_DMA(&hadc3, &battery_adc, 1); //uruchomienie konwersji ADC z DMA
 
@@ -337,17 +338,10 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  battery_voltage = 3.3f * battery_adc / 4096.0f;	//przeliczenie wartości napięcia zasilania
-	  //printf("ADC = %lu (%.3f V)\n", battery_adc, battery_voltage);	//tylko dla mnie, żebym widziała
+	  /*-----------Odczyt stanu bterii---------------*/
+	  battery_voltage = 3.3f * battery_adc / (4096.0f-1);	//przeliczenie wartości napięcia zasilania
+	  //printf("ADC = %lu (%.3f V)\n", battery_adc, battery_voltage);
 	  //HAL_Delay(500);
-/*	  if (HAL_ADC_PollForConversion(&hadc3, 10) == HAL_OK) {	//sprawdzenie, czy konwersja została zakończona
-		  battery_adc = HAL_ADC_GetValue(&hadc3);
-		  battery_voltage = 3.3f * battery_adc / 4096.0f;
-		  printf("ADC = %lu (%.3f V)\n", battery_adc, battery_voltage);
-		  HAL_Delay(500);
-		  HAL_ADC_Start(&hadc3);
-	  }
-*/
 
 	  /* sygnał przychodzący od odbiorników -------------------------------------------IR */
 	  /*-------sprawdzenie czy sygnal przychodzi-------*/
