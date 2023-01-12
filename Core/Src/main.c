@@ -32,18 +32,19 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
-#include <rc5_decode.h>
+//#include <rc5_decode.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
-extern RC5_Frame_t RC5_FRAME;
-
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+
+#define BUFFER_LEN   1
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -57,16 +58,21 @@ extern RC5_Frame_t RC5_FRAME;
 
 uint32_t battery_adc = 0;
 static int drive = 10;
-static uint8_t received = 10;
+static bool automat = false;
+static uint8_t RX_BUFFER[BUFFER_LEN] = {0};
 static int speed = 0;
 static float battery_voltage = 0;
-
-extern volatile enum StatusYesOrNo RC5FrameReceived;
-extern const uint8_t* aRC5Devices[32];
-extern const uint8_t* aRC5Commands[128];
-
-uint32_t ICValue1 = 0;
-uint32_t ICValue2 = 0;
+static bool rec_left = false;
+static bool rec_right = false;
+static bool spin_right = false;
+static bool spin_left = false;
+static bool center = false;
+static bool right = false;
+static bool left = false;
+static bool right_center = false;
+static bool left_center = false;
+static uint32_t distance = 0;
+static bool STATION = false;
 
 /* USER CODE END PV */
 
@@ -81,7 +87,8 @@ void SystemClock_Config(void);
 
 int __io_putchar(int ch)
 {
-    if (ch == '\n') {
+    if (ch == '\n')
+    {
         uint8_t ch2 = '\r';
         HAL_UART_Transmit(&huart2, &ch2, 1, HAL_MAX_DELAY);
     }
@@ -103,11 +110,12 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	}
 
 	/*przerwanie od od TIM 2 - dekodowanie IR*/
-	if (htim == &htim2)
+/*	if (htim == &htim2)
 	{
 		printf("TIM2 przerwanie\n");
 		RC5_ResetPacket();
 	}
+*/
 }
 
 /*przerwanie od od TIM 2 - dekodowanie IR*/
@@ -128,21 +136,22 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 	    It resets the InfraRed decoders packet.
 	    - The Timer Overflow is set to 3.6 ms .*/
 
-	    /* IC2 Interrupt*/
-	    if (HAL_TIM_GetActiveChannel(&htim2) == HAL_TIM_ACTIVE_CHANNEL_1)
+	    // IC2 Interrupt
+/*	    if (HAL_TIM_GetActiveChannel(&htim2) == HAL_TIM_ACTIVE_CHANNEL_1)
 	    {
 	    	printf("CH 1 przerwanie\n");
 	      ICValue2 = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_1);
-	      /* RC5 */
+	      // RC5
 	      RC5_DataSampling(ICValue2 - ICValue1 , 0);
 
-	    }  /* IC1 Interrupt */
+	    }  // IC1 Interrupt
 	    else if (HAL_TIM_GetActiveChannel(&htim2) == HAL_TIM_ACTIVE_CHANNEL_2)
 	    {
 	    	printf("CH 2 przerwanie\n");
 	      ICValue1 =  HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_2);
 	      RC5_DataSampling(ICValue1 , 1);
 	    }
+*/
 }
 
 void STOP(void)
@@ -155,17 +164,36 @@ void STOP(void)
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) //przerwanie od receivera uart
 {
-	/*podejmwoanie dzialan na podstawie odebranych danych
-	oraz wpisywanie informacji zwrotnej do bufora*/
-	switch( atoi((char*)&received) )
+	drive = atoi((char*)&RX_BUFFER[0]);
+
+	switch(drive)
+		{
+		case 0:
+			STOP();
+			printf("Odebrano: 0\n");
+			break;
+		case 1:
+			printf("Odebrano: 1\n");
+			break;
+		case 2:
+			printf("Odebrano: 2\n");
+			break;
+		case 5:
+			printf("Odebrano: 5\n");
+			break;
+		default:
+			break;
+		}
+
+	//podejmwoanie dzialan na podstawie odebranych danych
+	//oraz wpisywanie informacji zwrotnej do bufora
+/*	switch(drive)
 	{
 	case 0:
-		drive=0;
 		STOP();
 		printf("Odebrano: 0\n");
 		break;
 	case 1:
-		drive = 1;
 		speed = speed + 10;
 		//HAL_DAC_SetValue(&hdac, DAC_CHANNEL_1, DAC_ALIGN_12B_R, speed);
 		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
@@ -176,62 +204,59 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) //przerwanie od receiver
 		break;
 	case 2:
 		//STOP();
-		drive = 2;
 		printf("Odebrano: 2\n");
 		break;
 	case 3:
-		speed = speed - 10;
-		//HAL_DAC_SetValue(&hdac, DAC_CHANNEL_1, DAC_ALIGN_12B_R, speed);
-		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_SET);
-		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
-		HAL_Delay(100);
-		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);
-		drive = 3;
+		if (speed != 0)
+		{
+			speed = speed - 10;
+			//HAL_DAC_SetValue(&hdac, DAC_CHANNEL_1, DAC_ALIGN_12B_R, speed);
+			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_SET);
+			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
+			HAL_Delay(100);
+			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);
+		}
 		printf("Odebrano: 3\n");
 		break;
 	case 4:
-		//STOP();
 		drive = 4;
 		printf("Odebrano: 4\n");
 		break;
 	case 5:
-		drive = 5;
 		printf("Odebrano: 5\n");
 		break;
 	case 6:
 		//STOP();
-		drive = 6;
 		printf("Odebrano: 6\n");
 		break;
 	case 7:
 		//STOP();
-		drive = 7;
 		printf("Odebrano: 7\n");
 		break;
 	case 8:
 		//STOP();
-		drive = 8;
 		printf("Odebrano: 8\n");
 		break;
 	case 9:
 		//STOP();
-		drive = 9;
 		printf("Odebrano: 9\n");
 		break;
 	default:
 		break;
 	}
+*/
 
-	HAL_UART_Receive_IT(&huart2, &received, 1); //wlaczenie nasluchiwania na kanale UART
+	//wlaczenie nasluchiwania na kanale UART
+	HAL_UART_Receive_IT(&huart2, RX_BUFFER, BUFFER_LEN);
+
 }
-
 
 void PRZOD(void){
 	HAL_DAC_SetValue(&hdac, DAC_CHANNEL_1, DAC_ALIGN_12B_R, speed);
-	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_SET);	//1 przód
-	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_SET);	//2 przód
-	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET);	//3 przód
-	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_SET);	//4 przód
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_RESET);	//1 przód
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_RESET);	//2 przód
+	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);	//3 przód
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET);	//4 przód
 }
 
 void LEWA(void){
@@ -268,10 +293,10 @@ void OBROT_L(void){
 
 void TYL(void){
 	//HAL_DAC_SetValue(&hdac, DAC_CHANNEL_1, DAC_ALIGN_12B_R, speed);
-	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_RESET);	//1 tył
-	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_RESET);	//2 tył
-	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);	//3 tył
-	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET);	//4 tył
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_SET);	//1 tył
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_SET);	//2 tył
+	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET);	//3 tył
+	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_SET);	//4 tył
 }
 
 /* USER CODE END 0 */
@@ -311,26 +336,36 @@ int main(void)
   MX_USART2_UART_Init();
   MX_DAC_Init();
   MX_ADC3_Init();
-  //MX_TIM2_Init();
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
 
-  RC5_Init();
+  //RC5_Init();
 
+//  volatile static uint16_t reciver[2];
   HAL_ADC_Start_DMA(&hadc3, &battery_adc, 1); //uruchomienie konwersji ADC z DMA
+//  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)reciver, 2); //uruchomienie konwersji ADC z DMA
 
-  HAL_TIM_Base_Start_IT(&htim10); //wlaczenie przerwan od timera 10
-  HAL_TIM_Base_Start_IT(&htim2);
+  HAL_TIM_Base_Start_IT(&htim10); //wlaczenie przerwan od timera 10 - licznik czasu
+  HAL_TIM_IC_Start(&htim2, TIM_CHANNEL_1); //timer 2 - pomiar czujnika odleglosci
+  HAL_TIM_IC_Start(&htim2, TIM_CHANNEL_2);
+  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3);
+
+  HAL_Delay(1000);
+/*  HAL_TIM_Base_Start_IT(&htim2);
   HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_1);
   HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_2);
+*/
 
-  HAL_UART_Receive_IT(&huart2, &received, 1); //wlaczenie nasluchiwania na kanale UART
+  HAL_UART_Receive_IT(&huart2, RX_BUFFER, BUFFER_LEN);
+  //HAL_UART_Receive_IT(&huart2, &received, 1); //wlaczenie nasluchiwania na kanale UART
 
-  //aktywacja Core2530 do pracy
+/*  //aktywacja Core2530 do pracy
   HAL_GPIO_WritePin(GPIOD, GPIO_PIN_0, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(GPIOD, GPIO_PIN_7, GPIO_PIN_RESET);
   HAL_Delay(200);
   HAL_GPIO_WritePin(GPIOD, GPIO_PIN_0, GPIO_PIN_SET);
   HAL_GPIO_WritePin(GPIOD, GPIO_PIN_7, GPIO_PIN_SET);
+*/
 
   /* USER CODE END 2 */
 
@@ -338,35 +373,107 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  /*-----------Odczyt stanu bterii---------------*/
+	  //printf("drive -----> %u\n", drive);
+
+	  /*-----------Odczyt stanu baterii---------------*/
+/*	  HAL_ADC_Start(&hadc3);
+	  HAL_ADC_PollForConversion(&hadc3, HAL_MAX_DELAY);
+	  battery_adc = HAL_ADC_GetValue(&hadc3);
+	  battery_voltage = 3.3f * battery_adc / (4096.0f-1);
+*/
+	  //printf("ADC = %lu (%.3f V)\n", battery_adc, battery_voltage);
+	  //HAL_Delay(300);
+
+	  /*-----------Odczyt stanu baterii---------------*/
 	  battery_voltage = 3.3f * battery_adc / (4096.0f-1);	//przeliczenie wartości napięcia zasilania
 	  //printf("ADC = %lu (%.3f V)\n", battery_adc, battery_voltage);
 	  //HAL_Delay(500);
 
+	  /*----------------DOKOWANIE-ODCZYT-IR-------------------*/
+//	  HAL_ADC_Start(&hadc1);
+//	  HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
+//	  rec_left = HAL_ADC_GetValue(&hadc1);
+
+//	  HAL_ADC_Start(&hadc2);
+//	  HAL_ADC_PollForConversion(&hadc2, HAL_MAX_DELAY);
+//	  rec_right = HAL_ADC_GetValue(&hadc2);
+
+	  //float voltage = 3.3f * rec_left / 4096.0f;
+	  //printf("ADC = %lu (%.3f V)\n", value, voltage);
+
+	  /*--------------CZUJNIK ODLEGLOSCI----------------*/
+	  uint32_t start = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_1);
+	  uint32_t stop = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_2);
+
+	  distance = (stop - start) / 58;
+	  //printf("%lu cm\n", distance);
+
 	  /* sygnał przychodzący od odbiorników -------------------------------------------IR */
 	  /*-------sprawdzenie czy sygnal przychodzi-------*/
-/*	  if (HAL_GPIO_ReadPin(rec_left_GPIO_Port, rec_left_Pin) == GPIO_PIN_RESET)
+	  if (HAL_GPIO_ReadPin(rec_left_GPIO_Port, rec_left_Pin) == GPIO_PIN_RESET)
 	  {
+		  rec_left = true;
 		  printf("lewy\n");
-	  }
+		  HAL_Delay(100);
+	  }else
+		  rec_left = false;
 	  if (HAL_GPIO_ReadPin(rec_right_GPIO_Port, rec_right_Pin) == GPIO_PIN_RESET)
 	  {
+		  rec_right = true;
 		  printf("prawy\n");
-	  }
-*/
-	  /*-------RC5-------*/
-	  /* if data do not received */
-	  if(0x00 == RC5FrameReceived)
+		  HAL_Delay(100);
+	  }else
+		  rec_right = false;
+
+	  /*-----SWITCH DLA DANYCH ZE STACJI-------*/
+	  switch(drive)
 	  {
-		  //printf("Ni ma\n");
-	  }else{
-		  /* decode the rc5 frame */
-		  RC5_Decode(&RC5_FRAME);
-	  }
+	  	  case 0:
+	  		  STOP();
+	  		  //nadawanie informacji przez UART
+	  		  printf("STOP\n");
+	  		  drive = 10;
+	  		  break;
+	  	  case 1:
+	  		  //info, ze stacja wykryla przed soba robota
+	  		  printf("--- UWAGA STACJA WYKRYLA ROBOTA PRZED SOBA\n");
+	  		  STATION = true;
+	  		  drive = 10;
+	  		  break;
+	  	  case 2:
+	  		//info, ze stacja wykryla przed soba robota
+			  printf("--- ROBOT SIE ODDALIL\n");
+			  STATION = false;
+			  drive = 10;
+			  break;
+	  	  case 5:
+	  		  //TRYB AUTOMATYCZNY DOKOWANIA
+			  STOP();
+			  if (automat == false){
+				  STOP();
+				  automat = true;
+				  printf("Dokowanie -> ON\n");
+			  }else{
+				  STOP();
+				  spin_right = false;
+				  spin_left = false;
+				  automat = false;
+				  left = false;
+				  left_center = false;
+				  center = false;
+				  right_center = false;
+				  right = false;
+				  printf("Dokowanie -> OFF\n");
+			  }
+			  drive = 10;
+			  break;
+		  default:
+			  break;
+	  	  }
 
 	  /* w switchu nastepuje wykonywanie instrukcji wedlug odebranych z komputera danych
 	  wartosc zmiennej drive jest nadawana w przerwaniu UART po odebraniu komunikatu*/
-	  switch(drive)
+/*	  switch(drive)
 	  {
 	  case 0:
 		  STOP();
@@ -380,7 +487,7 @@ int main(void)
 		  drive = 10;
 		  break;
 	  case 2:
-		  PRZOD(); /*funkcja nadajaca keirunek jazdy robota do przodu*/
+		  PRZOD(); //funkcja nadajaca keirunek jazdy robota do przodu
 		  printf("Jazda do przodu\n");
 		  drive = 10;
 		  break;
@@ -390,45 +497,198 @@ int main(void)
 		  drive = 10;
 		  break;
 	  case 4:
-		  LEWA(); /*funkcja nadajaca keirunek jazdy robota w lewo*/
+		  LEWA(); //funkcja nadajaca keirunek jazdy robota w lewo
 		  printf("Jazda w lewo\n");
 		  drive = 10;
 		  break;
 	  case 5:
-		  //speed=50; /*ustawienie wypelnienia na wartosc poczatkowa (50)*/
+		  //speed=50; //ustawienie wypelnienia na wartosc poczatkowa (50)
 		  //printf("Wypelnienie: 50\n");
-		  printf("NIC\n");
+		  STOP();
+		  if (automat == false){
+			  STOP();
+			  automat = true;
+			  printf("Dokowanie -> ON\n");
+		  }else{
+			  STOP();
+			  automat = false;
+			  left = false;
+			  left_center = false;
+			  center = false;
+			  right_center = false;
+			  right = false;
+			  printf("Dokowanie -> OFF\n");
+		  }
+
+		  //printf("Automat ON/OFF\n");
 		  drive = 10;
 		  break;
 	  case 6:
-		  PRAWA(); /*funkcja nadajaca keirunek jazdy robota w prawo*/
+		  PRAWA(); //funkcja nadajaca keirunek jazdy robota w prawo
 		  printf("Jazda w prawo\n");
 		  drive = 10;
 		  break;
 	  case 7:
-		  OBROT_L(); /*funkcja powodujaca rotacje robota w lewo*/
+		  OBROT_L(); //funkcja powodujaca rotacje robota w lewo
 		  printf("Obrot w lewo\n");
 		  drive = 10;
 		  break;
 	  case 8:
-		  TYL(); /*funkcja nadajaca keirunek jazdy robota do tylu*/
+		  TYL(); //funkcja nadajaca keirunek jazdy robota do tylu
 		  printf("Jazda do tylu\n");
 		  drive = 10;
 		  break;
 	  case 9:
-		  OBROT_P(); /*funkcja powodujaca rotacje robota w prawo*/
+		  OBROT_P(); //funkcja powodujaca rotacje robota w prawo
 		  printf("Obrot w prawo\n");
 		  drive = 10;
 		  break;
 	  default:
 		  break;
 	  }
+*/
 
+	  if (automat == true)
+	  {
+/*		  HAL_ADC_Start(&hadc1);
+		  HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
+		  rec_left = HAL_ADC_GetValue(&hadc1);
+		  printf("REC_______LEFT = %lu\n", rec_left);
+		  HAL_ADC_Start(&hadc2);
+		  HAL_ADC_PollForConversion(&hadc2, HAL_MAX_DELAY);
+		  rec_right = HAL_ADC_GetValue(&hadc2);
+		  printf("REC_______RIGHT = %lu\n\n", rec_right);
+		  HAL_Delay(300);
+*/
+		  //lewy NIE
+		  if (rec_left == false && spin_right == false)
+		  {
+			  spin_left = false;
+			  spin_right = true;
+			  center = false;
+		  }
+		  //lewy TAK; prawy NIE
+		  else if (rec_left == true && rec_right == false && spin_left == false)
+		  {
+			  spin_left = true;
+			  spin_right = false;
+			  center = false;
+		  }
+		  //lewy TAK; prawy TAK
+		  else if (rec_left == true && rec_right == true && center == false)
+		  {
+			  spin_left = false;
+			  spin_right = false;
+			  center = true;
+		  }
+
+		  if (spin_left == true)
+		  {
+			  if (speed != 40)
+			  {
+				  STOP();
+				  OBROT_L();
+				  //zwiekszenie predkosci x4
+				  speed = 40;
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);
+				  HAL_Delay(100);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
+
+				  HAL_Delay(50);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);
+				  HAL_Delay(100);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
+
+				  HAL_Delay(50);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);
+				  HAL_Delay(100);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
+
+				  HAL_Delay(50);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);
+				  HAL_Delay(100);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
+			  }
+		  }
+		  else if (spin_right == true)
+	  	  {
+			  if (speed != 40)
+			  {
+				  STOP();
+				  OBROT_P();
+				  //zwiekszenie predkosci x4
+				  speed = 40;
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);
+				  HAL_Delay(100);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
+
+				  HAL_Delay(50);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);
+				  HAL_Delay(100);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
+
+				  HAL_Delay(50);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);
+				  HAL_Delay(100);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
+
+				  HAL_Delay(50);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);
+				  HAL_Delay(100);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
+			  }
+	  	  }
+	  	  else if (left == false && right == false && center == true && STATION == false)
+		  {
+			  if (speed != 40)
+			  {
+				  STOP();
+				  PRZOD();
+				  //zwiekszenie predkosci x3
+				  speed = 40;
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);
+				  HAL_Delay(100);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
+
+				  HAL_Delay(50);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);
+				  HAL_Delay(100);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
+
+				  HAL_Delay(50);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);
+				  HAL_Delay(100);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
+
+				  HAL_Delay(50);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);
+				  HAL_Delay(100);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
+			  }
+		  }
+		  else if ( (spin_left == false && spin_right == false && center == false) || STATION == true)
+		  {
+			  STOP();
+		  }
+
+
+  	  }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
   }
-
   /**
     * @brief  Identify TIM clock
     * @param  None
@@ -452,6 +712,7 @@ void SystemClock_Config(void)
   */
   __HAL_RCC_PWR_CLK_ENABLE();
   __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE1);
+
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
@@ -468,6 +729,7 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+
   /** Initializes the CPU, AHB and APB buses clocks
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
@@ -518,5 +780,3 @@ void assert_failed(uint8_t *file, uint32_t line)
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
-
-/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/

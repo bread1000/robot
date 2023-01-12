@@ -58,10 +58,10 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define rec_right_Pin GPIO_PIN_4
-#define rec_right_GPIO_Port GPIOE
-#define rec_left_Pin GPIO_PIN_5
-#define rec_left_GPIO_Port GPIOE
+#define rec_left_Pin GPIO_PIN_1
+#define rec_left_GPIO_Port GPIOA
+#define rec_right_Pin GPIO_PIN_2
+#define rec_right_GPIO_Port GPIOA
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */
@@ -71,5 +71,3 @@ void Error_Handler(void);
 #endif
 
 #endif /* __MAIN_H */
-
-/************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
