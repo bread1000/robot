@@ -69,8 +69,8 @@ static bool spin_left = false;
 static bool center = false;
 static bool right = false;
 static bool left = false;
-static bool right_center = false;
-static bool left_center = false;
+static bool on_left = false;
+static bool on_right = false;
 static uint32_t distance_left = 0;
 static uint32_t distance_right = 0;
 static bool STATION = false;
@@ -414,8 +414,8 @@ int main(void)
 	  printf("-------------LEFT--->%lu cm\n", distance_left);
 	  HAL_Delay(100);
 
-	  uint32_t start2 = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_1);
-	  uint32_t stop2 = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_2);
+	  uint32_t start2 = HAL_TIM_ReadCapturedValue(&htim3, TIM_CHANNEL_1);
+	  uint32_t stop2 = HAL_TIM_ReadCapturedValue(&htim3, TIM_CHANNEL_2);
 	  distance_right = (stop2 - start2) / 58;
 	  printf("-------------RIGHT------>%lu cm\n", distance_right);
 	  HAL_Delay(100);
@@ -471,10 +471,10 @@ int main(void)
 				  spin_left = false;
 				  automat = false;
 				  left = false;
-				  left_center = false;
+				  //on_left = false;
 				  center = false;
-				  right_center = false;
-				  right = false;
+				  on_right = false;
+				  //right = false;
 				  printf("Dokowanie -> OFF\n");
 			  }
 			  drive = 10;
@@ -562,59 +562,97 @@ int main(void)
 
 	  if (automat == true)
 	  {
-		  //lewy NIE; prawy NIE
-		  if (	(rec_left == false && spin_right == false && STATION == false) ||
-				//lewy NIE; prawy TAK
-				(rec_left == false && rec_right == true && spin_right == false && STATION == false) ||
-				//lewy NIE; prawy TAK + jest przy samej stacji + nie na wprost
-				(rec_left == false && rec_right == true && STATION == true && spin_right == false && distance_left > 12 && distance_right > 12) )
+		  if (rec_left == true && rec_right == true && distance_left < 12 && distance_right > distance_left && STATION == false)
 		  {
+			  on_left = true;
+			  on_right = false;
 			  left = false;
 			  right = false;
-			  spin_left = false;
-			  spin_right = true;
-			  center = false;
-		  }
-		  //lewy TAK; prawy NIE
-		  else if ( (rec_left == true && rec_right == false && spin_left == false && STATION == false) ||
-				  //lewy TAK; prawy NIE + jest przy samej stacji + nie na wprost
-				  (rec_left == true && rec_right == false && STATION == true && spin_left == false && distance_left > 12 && distance_right > 12) )
-		  {
-			  left = false;
-			  right = false;
-			  spin_left = true;
-			  spin_right = false;
-			  center = false;
-		  }
-		  //lewy TAK; prawy TAK
-		  else if (rec_left == true && rec_right == true && center == false)
-		  {
-			  left = false;
-			  right = false;
-			  spin_left = false;
-			  spin_right = false;
-			  center = true;
-		  }
-		  //lewy TAK; prawy NIE + jest przy samej stacji + na wprost
-		  else if (rec_left == true && rec_right == false && STATION == true && left == false && distance_left < 12 && distance_right < 12)
-		  {
-			  left = true;
-			  right = false;
-			  spin_left = false;
-			  spin_right = false;
-			  center = false;
-		  }
-		  //lewy NIE; prawy TAK + jest przy samej stacji + na wprost
-		  else if (rec_left == false && rec_right == true && STATION == true && right == false && distance_left < 12 && distance_right < 12)
-		  {
-			  left = false;
-			  right = true;
 			  spin_left = false;
 			  spin_right = false;
 			  center = false;
 		  }
 
-		  if (STATION == true && center == true && distance_left <= 12 && distance_right <= 12)
+		  if (on_left == false)
+		  {
+			  //lewy TAK; prawy NIE + jest przy samej stacji + na wprost
+			  if (rec_left == true && rec_right == false && STATION == true && left == false && distance_left < 12 && distance_right < 12)
+			  {
+				  left = true;
+				  right = false;
+				  spin_left = false;
+				  spin_right = false;
+				  center = false;
+			  }
+			  //lewy NIE; prawy TAK + jest przy samej stacji + na wprost
+			  else if (rec_left == false && rec_right == true && STATION == true && right == false && distance_left < 12 && distance_right < 12)
+			  {
+				  left = false;
+				  right = true;
+				  spin_left = false;
+				  spin_right = false;
+				  center = false;
+			  }
+			  //lewy NIE; prawy NIE
+			  else if (	(rec_left == false && spin_right == false && STATION == false) ||
+					//lewy NIE; prawy TAK
+					(rec_left == false && rec_right == true && spin_right == false && STATION == false) ||
+					//lewy NIE; prawy TAK + jest przy samej stacji + nie na wprost
+					(rec_left == false && rec_right == true && STATION == true && spin_right == false && distance_left > distance_right && distance_right < 12)||
+					//lewy TAK; prawy NIE + jest przy samej stacji + nie na wprost
+					(rec_left == true && rec_right == false && STATION == true && spin_right == false && distance_left > distance_right && distance_right < 12))
+			  {
+				  left = false;
+				  right = false;
+				  spin_left = false;
+				  spin_right = true;
+				  center = false;
+			  }
+			  //lewy TAK; prawy NIE
+			  else if ( (rec_left == true && rec_right == false && spin_left == false && STATION == false) ||
+					  //lewy TAK; prawy NIE + jest przy samej stacji + nie na wprost
+					  (rec_left == true && rec_right == false && STATION == true && spin_left == false && distance_left < 12 && distance_right > distance_left)||
+					  //lewy NIE; prawy TAK + jest przy samej stacji + nie na wprost
+					  (rec_left == false && rec_right == true && STATION == true && spin_left == false && distance_left < 12 && distance_right > distance_left))
+			  {
+				  left = false;
+				  right = false;
+				  spin_left = true;
+				  spin_right = false;
+				  center = false;
+			  }
+			  //lewy TAK; prawy TAK
+			  else if (rec_left == true && rec_right == true && center == false)
+			  {
+				  left = false;
+				  right = false;
+				  spin_left = false;
+				  spin_right = false;
+				  center = true;
+			  }
+		  }
+		  else if(on_left == true)
+		  {
+			  if(	(rec_left == true && rec_right == true && spin_left == false && right == false) ||
+					  	(rec_left == false && rec_right == false) )
+			  {
+				  right = false;
+				  spin_left = true;
+			  }
+			  else if(rec_left == false && rec_right == true)
+			  {
+				  right = true;
+				  spin_left = false;
+			  }
+			  else if(rec_left == true && rec_right == false && right == false)
+			  {
+				  //right = false;
+				  spin_left = false;
+				  on_left = false;
+			  }
+		  }
+
+		  if (center == true && distance_left < 12 && distance_right < 12 && on_left == false && STATION == true)
 		  {
 			  STOP();
 		  }
@@ -714,6 +752,38 @@ int main(void)
 				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
 			  }
 		  }
+		  else if (right == true)
+		  {
+			  if (speed != 40)
+			  {
+				  STOP();
+				  PRAWA();
+				  //zwiekszenie predkosci x4
+				  speed = 40;
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);
+				  HAL_Delay(100);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
+
+				  HAL_Delay(50);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);
+				  HAL_Delay(100);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
+
+				  HAL_Delay(50);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);
+				  HAL_Delay(100);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
+
+				  HAL_Delay(50);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);
+				  HAL_Delay(100);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
+			  }
+		  }
 	  	  else if (center == true)
 		  {
 			  if (speed != 40)
@@ -746,7 +816,6 @@ int main(void)
 				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
 			  }
 		  }
-
 
   	  }
     /* USER CODE END WHILE */
