@@ -572,8 +572,18 @@ int main(void)
 			  spin_right = false;
 			  center = false;
 		  }
+		  else if (rec_left == true && rec_right == true && distance_right < 12 && distance_left > distance_right && STATION == false)
+		  {
+			  on_left = false;
+			  on_right = true;
+			  left = false;
+			  right = false;
+			  spin_left = false;
+			  spin_right = false;
+			  center = false;
+		  }
 
-		  if (on_left == false)
+		  if (on_left == false && on_right == false)
 		  {
 			  //lewy TAK; prawy NIE + jest przy samej stacji + na wprost
 			  if (rec_left == true && rec_right == false && STATION == true && left == false && distance_left < 12 && distance_right < 12)
@@ -651,8 +661,28 @@ int main(void)
 				  on_left = false;
 			  }
 		  }
+		  else if (on_right == true)
+		  {
+			  if(	(rec_left == true && rec_right == true && spin_right == false && left == false) ||
+						(rec_left == false && rec_right == false) )
+			  {
+				  left = false;
+				  spin_right = true;
+			  }
+			  else if(rec_left == true && rec_right == false)
+			  {
+				  left = true;
+				  spin_right = false;
+			  }
+			  else if(rec_left == false && rec_right == true && left == false)
+			  {
+				  //left = false;
+				  spin_right = false;
+				  on_right = false;
+			  }
+		  }
 
-		  if (center == true && distance_left < 12 && distance_right < 12 && on_left == false && STATION == true)
+		  if (center == true && distance_left < 12 && distance_right < 12 && on_left == false && on_right == false && STATION == true)
 		  {
 			  STOP();
 		  }
