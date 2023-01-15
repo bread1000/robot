@@ -406,7 +406,8 @@ int main(void)
 	  uint32_t stop = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_2);
 
 	  distance = (stop - start) / 58;
-	  //printf("%lu cm\n", distance);
+	  printf("--------------%lu cm\n", distance);
+	  HAL_Delay(100);
 
 	  /* sygnał przychodzący od odbiorników -------------------------------------------IR */
 	  /*-------sprawdzenie czy sygnal przychodzi-------*/
@@ -560,6 +561,7 @@ int main(void)
 		  printf("REC_______RIGHT = %lu\n\n", rec_right);
 		  HAL_Delay(300);
 */
+
 		  //lewy NIE
 		  if (rec_left == false && spin_right == false)
 		  {
@@ -568,8 +570,10 @@ int main(void)
 			  center = false;
 		  }
 		  //lewy TAK; prawy NIE
-		  else if (rec_left == true && rec_right == false && spin_left == false)
+		  else if (rec_left == true && rec_right == false && spin_left == false && STATION == false)
 		  {
+			  left = false;
+			  right = false;
 			  spin_left = true;
 			  spin_right = false;
 			  center = false;
@@ -577,12 +581,36 @@ int main(void)
 		  //lewy TAK; prawy TAK
 		  else if (rec_left == true && rec_right == true && center == false)
 		  {
+			  left = false;
+			  right = false;
 			  spin_left = false;
 			  spin_right = false;
 			  center = true;
 		  }
+		  //lewy TAK; prawy NIE + robot sie obracal w prawo
+/*		  else if (rec_left == true && rec_right == false && spin_right == true && left == false)
+		  {
+			  left = true;
+			  right = false;
+			  spin_left = false;
+			  spin_right = false;
+			  center = false;
+		  }*/
+		  //lewy TAK; prawy nie + jest przy samej stacji
+		  else if (rec_left == true && rec_right == false && STATION == true && left == false)
+		  {
+			  left = true;
+			  right = false;
+			  spin_left = false;
+			  spin_right = false;
+			  center = false;
+		  }
 
-		  if (spin_left == true)
+		  if (STATION == true && center == true)
+		  {
+			  STOP();
+		  }
+		  else if (spin_left == true)
 		  {
 			  if (speed != 40)
 			  {
@@ -646,7 +674,39 @@ int main(void)
 				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
 			  }
 	  	  }
-	  	  else if (left == false && right == false && center == true && STATION == false)
+		  else if (left == true)
+		  {
+			  if (speed != 40)
+			  {
+				  STOP();
+				  LEWA();
+				  //zwiekszenie predkosci x4
+				  speed = 40;
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);
+				  HAL_Delay(100);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
+
+				  HAL_Delay(50);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);
+				  HAL_Delay(100);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
+
+				  HAL_Delay(50);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);
+				  HAL_Delay(100);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
+
+				  HAL_Delay(50);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);
+				  HAL_Delay(100);
+				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
+			  }
+		  }
+	  	  else if (center == true)
 		  {
 			  if (speed != 40)
 			  {
@@ -677,10 +737,6 @@ int main(void)
 				  HAL_Delay(100);
 				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
 			  }
-		  }
-		  else if ( (spin_left == false && spin_right == false && center == false) || STATION == true)
-		  {
-			  STOP();
 		  }
 
 
