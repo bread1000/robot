@@ -71,7 +71,8 @@ static bool right = false;
 static bool left = false;
 static bool right_center = false;
 static bool left_center = false;
-static uint32_t distance = 0;
+static uint32_t distance_left = 0;
+static uint32_t distance_right = 0;
 static bool STATION = false;
 
 /* USER CODE END PV */
@@ -337,6 +338,7 @@ int main(void)
   MX_DAC_Init();
   MX_ADC3_Init();
   MX_TIM2_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
 
   //RC5_Init();
@@ -346,9 +348,13 @@ int main(void)
 //  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)reciver, 2); //uruchomienie konwersji ADC z DMA
 
   HAL_TIM_Base_Start_IT(&htim10); //wlaczenie przerwan od timera 10 - licznik czasu
-  HAL_TIM_IC_Start(&htim2, TIM_CHANNEL_1); //timer 2 - pomiar czujnika odleglosci
+  HAL_TIM_IC_Start(&htim2, TIM_CHANNEL_1); //timer 2 - pomiar czujnika odleglosci - LEWY
   HAL_TIM_IC_Start(&htim2, TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3);
+
+  HAL_TIM_IC_Start(&htim3, TIM_CHANNEL_1); //timer 2 - pomiar czujnika odleglosci - PRAWY
+  HAL_TIM_IC_Start(&htim3, TIM_CHANNEL_2);
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
 
   HAL_Delay(1000);
 /*  HAL_TIM_Base_Start_IT(&htim2);
@@ -401,12 +407,17 @@ int main(void)
 	  //float voltage = 3.3f * rec_left / 4096.0f;
 	  //printf("ADC = %lu (%.3f V)\n", value, voltage);
 
-	  /*--------------CZUJNIK ODLEGLOSCI----------------*/
-	  uint32_t start = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_1);
-	  uint32_t stop = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_2);
+	  /*--------------CZUJNIKI ODLEGLOSCI----------------*/
+	  uint32_t start1 = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_1);
+	  uint32_t stop1 = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_2);
+	  distance_left = (stop1 - start1) / 58;
+	  printf("-------------LEFT--->%lu cm\n", distance_left);
+	  HAL_Delay(100);
 
-	  distance = (stop - start) / 58;
-	  printf("--------------%lu cm\n", distance);
+	  uint32_t start2 = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_1);
+	  uint32_t stop2 = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_2);
+	  distance_right = (stop2 - start2) / 58;
+	  printf("-------------RIGHT------>%lu cm\n", distance_right);
 	  HAL_Delay(100);
 
 	  /* sygnał przychodzący od odbiorników -------------------------------------------IR */
@@ -551,26 +562,23 @@ int main(void)
 
 	  if (automat == true)
 	  {
-/*		  HAL_ADC_Start(&hadc1);
-		  HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
-		  rec_left = HAL_ADC_GetValue(&hadc1);
-		  printf("REC_______LEFT = %lu\n", rec_left);
-		  HAL_ADC_Start(&hadc2);
-		  HAL_ADC_PollForConversion(&hadc2, HAL_MAX_DELAY);
-		  rec_right = HAL_ADC_GetValue(&hadc2);
-		  printf("REC_______RIGHT = %lu\n\n", rec_right);
-		  HAL_Delay(300);
-*/
-
-		  //lewy NIE
-		  if (rec_left == false && spin_right == false)
+		  //lewy NIE; prawy NIE
+		  if (	(rec_left == false && spin_right == false && STATION == false) ||
+				//lewy NIE; prawy TAK
+				(rec_left == false && rec_right == true && spin_right == false && STATION == false) ||
+				//lewy NIE; prawy TAK + jest przy samej stacji + nie na wprost
+				(rec_left == false && rec_right == true && STATION == true && spin_right == false && distance_left > 12 && distance_right > 12) )
 		  {
+			  left = false;
+			  right = false;
 			  spin_left = false;
 			  spin_right = true;
 			  center = false;
 		  }
 		  //lewy TAK; prawy NIE
-		  else if (rec_left == true && rec_right == false && spin_left == false && STATION == false)
+		  else if ( (rec_left == true && rec_right == false && spin_left == false && STATION == false) ||
+				  //lewy TAK; prawy NIE + jest przy samej stacji + nie na wprost
+				  (rec_left == true && rec_right == false && STATION == true && spin_left == false && distance_left > 12 && distance_right > 12) )
 		  {
 			  left = false;
 			  right = false;
@@ -587,17 +595,8 @@ int main(void)
 			  spin_right = false;
 			  center = true;
 		  }
-		  //lewy TAK; prawy NIE + robot sie obracal w prawo
-/*		  else if (rec_left == true && rec_right == false && spin_right == true && left == false)
-		  {
-			  left = true;
-			  right = false;
-			  spin_left = false;
-			  spin_right = false;
-			  center = false;
-		  }*/
-		  //lewy TAK; prawy nie + jest przy samej stacji
-		  else if (rec_left == true && rec_right == false && STATION == true && left == false)
+		  //lewy TAK; prawy NIE + jest przy samej stacji + na wprost
+		  else if (rec_left == true && rec_right == false && STATION == true && left == false && distance_left < 12 && distance_right < 12)
 		  {
 			  left = true;
 			  right = false;
@@ -605,8 +604,17 @@ int main(void)
 			  spin_right = false;
 			  center = false;
 		  }
+		  //lewy NIE; prawy TAK + jest przy samej stacji + na wprost
+		  else if (rec_left == false && rec_right == true && STATION == true && right == false && distance_left < 12 && distance_right < 12)
+		  {
+			  left = false;
+			  right = true;
+			  spin_left = false;
+			  spin_right = false;
+			  center = false;
+		  }
 
-		  if (STATION == true && center == true)
+		  if (STATION == true && center == true && distance_left <= 12 && distance_right <= 12)
 		  {
 			  STOP();
 		  }
