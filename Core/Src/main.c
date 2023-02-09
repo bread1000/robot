@@ -20,7 +20,6 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "adc.h"
-#include "dac.h"
 #include "dma.h"
 #include "tim.h"
 #include "usart.h"
@@ -37,28 +36,23 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
 #define BUFFER_LEN   1
-
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
 uint32_t battery_adc = 0;
 static int drive = 10;
-static bool automat = false;
+static bool DOCKING = false;
 static uint8_t RX_BUFFER[BUFFER_LEN] = {0};
 static int speed = 0;
 static float battery_voltage = 0;
@@ -86,6 +80,7 @@ void SystemClock_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+//Funkcja umożliwiająca wysyłanie znaków przez uart za pomocą funkcji 'printf()'
 int __io_putchar(int ch)
 {
     if (ch == '\n')
@@ -100,206 +95,103 @@ int __io_putchar(int ch)
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-	/*przerwanie od TIM 10 - co 5 sekund wysyla wiadomosc o czasie dzialania programu*/
+	//przerwanie od TIM 10 - co 5 sekund
 	if(htim == &htim10)
 	{
-		static uint16_t cnt = 0; //licznik sekund
-		cnt+=5;
-
-		printf("Czas pracy [s]: %d\n", cnt);
 		HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_15); //sygnalizacja nadawania
+		printf("%lu\n", battery_adc);			//przesłanie stacji informacji o zmierzonym napięciu baterii
 	}
-
-	/*przerwanie od od TIM 2 - dekodowanie IR*/
-/*	if (htim == &htim2)
-	{
-		printf("TIM2 przerwanie\n");
-		RC5_ResetPacket();
-	}
-*/
 }
 
-/*przerwanie od od TIM 2 - dekodowanie IR*/
-void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
+//Funkcja wysyłająca wymuszająca w Arduino zwiększenie prędkości obrotu silników
+void speed_plus(int i)
 {
-	/* - Timer Falling Edge Event:
-	    The Timer interrupt is used to measure the period between two
-	    successive falling edges (The whole pulse duration).
-
-	    - Timer Rising Edge Event:
-	    It is also used to measure the duration between falling and rising
-	    edges (The low pulse duration).
-	    The two durations are useful to determine the bit value. Each bit is
-	    determined according to the last bit.
-
-	    Update event:InfraRed decoders time out event.
-	    ---------------------------------------------
-	    It resets the InfraRed decoders packet.
-	    - The Timer Overflow is set to 3.6 ms .*/
-
-	    // IC2 Interrupt
-/*	    if (HAL_TIM_GetActiveChannel(&htim2) == HAL_TIM_ACTIVE_CHANNEL_1)
-	    {
-	    	printf("CH 1 przerwanie\n");
-	      ICValue2 = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_1);
-	      // RC5
-	      RC5_DataSampling(ICValue2 - ICValue1 , 0);
-
-	    }  // IC1 Interrupt
-	    else if (HAL_TIM_GetActiveChannel(&htim2) == HAL_TIM_ACTIVE_CHANNEL_2)
-	    {
-	    	printf("CH 2 przerwanie\n");
-	      ICValue1 =  HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_2);
-	      RC5_DataSampling(ICValue1 , 1);
-	    }
-*/
+	int k = 0;
+	for (k == 0; k++; k < i)
+	{
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);
+		HAL_Delay(50);
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
+		HAL_Delay(50);
+	}
 }
 
+//Funkcja wysyłająca wymuszająca w Arduino zmniejszenie prędkości obrotu silników
+void speed_minus(int i)
+{
+	int k = 0;
+	for (k == 0; k++; k < i)
+	{
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
+		HAL_Delay(50);
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);
+		HAL_Delay(50);
+	}
+}
+
+//Funkcja zatrzymująca silniki - zatrzymanie robota
 void STOP(void)
 {
 	speed = 0;
-	HAL_DAC_SetValue(&hdac, DAC_CHANNEL_1, DAC_ALIGN_12B_R, speed);
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_SET);
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
 }
 
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) //przerwanie od receivera uart
+//Przerwanie UART - odebranie danych
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-	drive = atoi((char*)&RX_BUFFER[0]);
+	drive = atoi((char*)&RX_BUFFER[0]); 					//zapisanie odebranego znaku 'char' do zmiennej 'int'
+	if (drive == 0)
+		STOP();												//jeśli odebrano wartość '0' - bezwarunkowe zatrzymanie robota
 
-	switch(drive)
-		{
-		case 0:
-			STOP();
-			printf("Odebrano: 0\n");
-			break;
-		case 1:
-			printf("Odebrano: 1\n");
-			break;
-		case 2:
-			printf("Odebrano: 2\n");
-			break;
-		case 5:
-			printf("Odebrano: 5\n");
-			break;
-		default:
-			break;
-		}
-
-	//podejmwoanie dzialan na podstawie odebranych danych
-	//oraz wpisywanie informacji zwrotnej do bufora
-/*	switch(drive)
-	{
-	case 0:
-		STOP();
-		printf("Odebrano: 0\n");
-		break;
-	case 1:
-		speed = speed + 10;
-		//HAL_DAC_SetValue(&hdac, DAC_CHANNEL_1, DAC_ALIGN_12B_R, speed);
-		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
-		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);
-		HAL_Delay(100);
-		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
-		printf("Odebrano: 1\n");
-		break;
-	case 2:
-		//STOP();
-		printf("Odebrano: 2\n");
-		break;
-	case 3:
-		if (speed != 0)
-		{
-			speed = speed - 10;
-			//HAL_DAC_SetValue(&hdac, DAC_CHANNEL_1, DAC_ALIGN_12B_R, speed);
-			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_SET);
-			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_RESET);
-			HAL_Delay(100);
-			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_11, GPIO_PIN_RESET);
-		}
-		printf("Odebrano: 3\n");
-		break;
-	case 4:
-		drive = 4;
-		printf("Odebrano: 4\n");
-		break;
-	case 5:
-		printf("Odebrano: 5\n");
-		break;
-	case 6:
-		//STOP();
-		printf("Odebrano: 6\n");
-		break;
-	case 7:
-		//STOP();
-		printf("Odebrano: 7\n");
-		break;
-	case 8:
-		//STOP();
-		printf("Odebrano: 8\n");
-		break;
-	case 9:
-		//STOP();
-		printf("Odebrano: 9\n");
-		break;
-	default:
-		break;
-	}
-*/
-
-	//wlaczenie nasluchiwania na kanale UART
-	HAL_UART_Receive_IT(&huart2, RX_BUFFER, BUFFER_LEN);
-
+	HAL_UART_Receive_IT(&huart2, RX_BUFFER, BUFFER_LEN);	//wlaczenie nasluchiwania na kanale UART
 }
 
-void PRZOD(void){
+//Zestaw funkcji nadających kierunek i prędkość silnikom
+void FORWARD(void){
 	HAL_DAC_SetValue(&hdac, DAC_CHANNEL_1, DAC_ALIGN_12B_R, speed);
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_RESET);	//1 przód
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_RESET);	//2 przód
 	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);	//3 przód
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET);	//4 przód
 }
-
-void LEWA(void){
+void LEFT(void){
 	HAL_DAC_SetValue(&hdac, DAC_CHANNEL_1, DAC_ALIGN_12B_R, speed);
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_SET);		//1 przód
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_RESET);	//2 tył
 	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET);		//3 przód
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET);	//4 tył
 }
-
-void PRAWA(void){
+void RIGHT(void){
 	HAL_DAC_SetValue(&hdac, DAC_CHANNEL_1, DAC_ALIGN_12B_R, speed);
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_RESET);	//1 tył
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_SET);		//2 przód
 	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);	//3 tył
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_SET);		//4 przód
 }
-
-void OBROT_P(void){
+void SPIN_R(void){
 	HAL_DAC_SetValue(&hdac, DAC_CHANNEL_1, DAC_ALIGN_12B_R, speed);
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_SET);		//1 przód
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_RESET);	//2 tył
 	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);	//3 tył
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_SET);		//4 przód
 }
-
-void OBROT_L(void){
+void SPIN_L(void){
 	HAL_DAC_SetValue(&hdac, DAC_CHANNEL_1, DAC_ALIGN_12B_R, speed);
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_RESET);	//1 tył
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_SET);		//2 przód
 	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET);		//3 przód
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET);	//4 tył
 }
-
-void TYL(void){
+void BACK(void){
 	//HAL_DAC_SetValue(&hdac, DAC_CHANNEL_1, DAC_ALIGN_12B_R, speed);
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_8, GPIO_PIN_SET);	//1 tył
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_SET);	//2 tył
 	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_SET);	//3 tył
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_SET);	//4 tył
 }
-
 /* USER CODE END 0 */
 
 /**
@@ -309,7 +201,6 @@ void TYL(void){
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -318,16 +209,12 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-
-  //uint32_t DAC_OUT[100];
-
   /* USER CODE END Init */
 
   /* Configure the system clock */
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
@@ -335,232 +222,100 @@ int main(void)
   MX_DMA_Init();
   MX_TIM10_Init();
   MX_USART2_UART_Init();
-  MX_DAC_Init();
   MX_ADC3_Init();
   MX_TIM2_Init();
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
 
-  //RC5_Init();
+  HAL_ADC_Start_DMA(&hadc3, &battery_adc, 1);	//uruchomienie konwersji ADC z DMA
 
-//  volatile static uint16_t reciver[2];
-  HAL_ADC_Start_DMA(&hadc3, &battery_adc, 1); //uruchomienie konwersji ADC z DMA
-//  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)reciver, 2); //uruchomienie konwersji ADC z DMA
-
-  HAL_TIM_Base_Start_IT(&htim10); //wlaczenie przerwan od timera 10 - licznik czasu
-  HAL_TIM_IC_Start(&htim2, TIM_CHANNEL_1); //timer 2 - pomiar czujnika odleglosci - LEWY
+  HAL_TIM_Base_Start_IT(&htim10);				//wlaczenie przerwan od timera 10 - dioda określająca działanie programu
+  HAL_TIM_IC_Start(&htim2, TIM_CHANNEL_1); 		//timer 2 - obsługuje lewy czujnik odległości HC-SR04
   HAL_TIM_IC_Start(&htim2, TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3);
 
-  HAL_TIM_IC_Start(&htim3, TIM_CHANNEL_1); //timer 2 - pomiar czujnika odleglosci - PRAWY
+  HAL_TIM_IC_Start(&htim3, TIM_CHANNEL_1);		//timer 3 - obsługuje prawy czujnik odległości HC-SR04
   HAL_TIM_IC_Start(&htim3, TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
 
-  HAL_Delay(1000);
-/*  HAL_TIM_Base_Start_IT(&htim2);
-  HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_1);
-  HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_2);
-*/
-
-  HAL_UART_Receive_IT(&huart2, RX_BUFFER, BUFFER_LEN);
-  //HAL_UART_Receive_IT(&huart2, &received, 1); //wlaczenie nasluchiwania na kanale UART
-
-/*  //aktywacja Core2530 do pracy
-  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_0, GPIO_PIN_RESET);
-  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_7, GPIO_PIN_RESET);
-  HAL_Delay(200);
-  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_0, GPIO_PIN_SET);
-  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_7, GPIO_PIN_SET);
-*/
-
+  HAL_UART_Receive_IT(&huart2, RX_BUFFER, BUFFER_LEN);	//wlaczenie nasluchiwania na kanale UART
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  uint8_t start1 = 0;
+  uint8_t start2 = 0;
+  uint8_t stop1 = 0;
+  uint8_t stop2 = 0;
+
   while (1)
   {
-	  //printf("drive -----> %u\n", drive);
-
-	  /*-----------Odczyt stanu baterii---------------*/
-/*	  HAL_ADC_Start(&hadc3);
-	  HAL_ADC_PollForConversion(&hadc3, HAL_MAX_DELAY);
-	  battery_adc = HAL_ADC_GetValue(&hadc3);
-	  battery_voltage = 3.3f * battery_adc / (4096.0f-1);
-*/
-	  //printf("ADC = %lu (%.3f V)\n", battery_adc, battery_voltage);
-	  //HAL_Delay(300);
-
-	  /*-----------Odczyt stanu baterii---------------*/
-	  battery_voltage = 3.3f * battery_adc / (4096.0f-1);	//przeliczenie wartości napięcia zasilania
-	  //printf("ADC = %lu (%.3f V)\n", battery_adc, battery_voltage);
-	  //HAL_Delay(500);
-
-	  /*----------------DOKOWANIE-ODCZYT-IR-------------------*/
-//	  HAL_ADC_Start(&hadc1);
-//	  HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
-//	  rec_left = HAL_ADC_GetValue(&hadc1);
-
-//	  HAL_ADC_Start(&hadc2);
-//	  HAL_ADC_PollForConversion(&hadc2, HAL_MAX_DELAY);
-//	  rec_right = HAL_ADC_GetValue(&hadc2);
-
-	  //float voltage = 3.3f * rec_left / 4096.0f;
-	  //printf("ADC = %lu (%.3f V)\n", value, voltage);
-
 	  /*--------------CZUJNIKI ODLEGLOSCI----------------*/
-	  uint32_t start1 = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_1);
-	  uint32_t stop1 = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_2);
-	  distance_left = (stop1 - start1) / 58;
-	  printf("-------------LEFT--->%lu cm\n", distance_left);
-	  HAL_Delay(100);
+	  start1 = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_1);	//wystąpienie zbocza narastającego sygnału 'echo'
+	  stop1 = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_2);		//wystąpienie zbocza opadającego sygnału 'echo'
+	  distance_left = (stop1 - start1) / 58.0f;						//czas wystąpienia sygnału 'echo'
 
-	  uint32_t start2 = HAL_TIM_ReadCapturedValue(&htim3, TIM_CHANNEL_1);
-	  uint32_t stop2 = HAL_TIM_ReadCapturedValue(&htim3, TIM_CHANNEL_2);
-	  distance_right = (stop2 - start2) / 58;
-	  printf("-------------RIGHT------>%lu cm\n", distance_right);
-	  HAL_Delay(100);
+	  start2 = HAL_TIM_ReadCapturedValue(&htim3, TIM_CHANNEL_1);
+	  stop2 = HAL_TIM_ReadCapturedValue(&htim3, TIM_CHANNEL_2);
+	  distance_right = (stop2 - start2) / 58.0f;
 
 	  /* sygnał przychodzący od odbiorników -------------------------------------------IR */
-	  /*-------sprawdzenie czy sygnal przychodzi-------*/
 	  if (HAL_GPIO_ReadPin(rec_left_GPIO_Port, rec_left_Pin) == GPIO_PIN_RESET)
-	  {
 		  rec_left = true;
-		  printf("lewy\n");
-		  HAL_Delay(100);
-	  }else
+	  else
 		  rec_left = false;
+
 	  if (HAL_GPIO_ReadPin(rec_right_GPIO_Port, rec_right_Pin) == GPIO_PIN_RESET)
-	  {
 		  rec_right = true;
-		  printf("prawy\n");
-		  HAL_Delay(100);
-	  }else
+	  else
 		  rec_right = false;
 
 	  /*-----SWITCH DLA DANYCH ZE STACJI-------*/
 	  switch(drive)
 	  {
 	  	  case 0:
-	  		  STOP();
-	  		  //nadawanie informacji przez UART
-	  		  printf("STOP\n");
+	  		  STOP();				//zatrzymanie robota
 	  		  drive = 10;
 	  		  break;
 	  	  case 1:
-	  		  //info, ze stacja wykryla przed soba robota
-	  		  printf("--- UWAGA STACJA WYKRYLA ROBOTA PRZED SOBA\n");
-	  		  STATION = true;
+	  		  STATION = true;		//czujnik odległości stacji wykrył stację przed stykami
 	  		  drive = 10;
 	  		  break;
 	  	  case 2:
-	  		//info, ze stacja wykryla przed soba robota
-			  printf("--- ROBOT SIE ODDALIL\n");
-			  STATION = false;
+			  STATION = false;		//czujnik odległości stacji wykrył oddalenie się robota od styków
 			  drive = 10;
 			  break;
-	  	  case 5:
-	  		  //TRYB AUTOMATYCZNY DOKOWANIA
-			  STOP();
-			  if (automat == false){
-				  STOP();
-				  automat = true;
-				  printf("Dokowanie -> ON\n");
-			  }else{
-				  STOP();
+	  	  case 3:
+	  		  STOP(); //----------zmienic docking na docked
+	  		  if (DOCKING == true)	//stacja wykryła napięcie na stykach - robot jest zadokowany do stacji
+	  			  DOCKING = false;
+	  		  drive = 10;
+			  break;
+	  	  case 4:
+  		  	  STOP();
+  		  	  if (DOCKING == false)	//stacja przestała wykrywać napięcie na stykach - robot odłączył się od stacji
+	  	  	  {
+  		  		  DOCKING = true;
+  		  		  //reset pomocniczych zmiennych procesu dokowania
 				  spin_right = false;
 				  spin_left = false;
-				  automat = false;
 				  left = false;
-				  //on_left = false;
 				  center = false;
 				  on_right = false;
-				  //right = false;
-				  printf("Dokowanie -> OFF\n");
 			  }
+  		  	  drive = 10;
+			  break;
+	  	case 5:
+			  STOP();
+			  if (DOCKING == false)	//stacja wymusza proces dokowania
+				  DOCKING = true;
 			  drive = 10;
 			  break;
 		  default:
 			  break;
 	  	  }
 
-	  /* w switchu nastepuje wykonywanie instrukcji wedlug odebranych z komputera danych
-	  wartosc zmiennej drive jest nadawana w przerwaniu UART po odebraniu komunikatu*/
-/*	  switch(drive)
-	  {
-	  case 0:
-		  STOP();
-		  //nadawanie informacji przez UART
-		  printf("STOP\n");
-		  drive = 10;
-		  break;
-	  case 1:
-		  //Zmiana wartości wypełnienia (+10)
-		  printf("Wypelnienie: %d\n", speed);
-		  drive = 10;
-		  break;
-	  case 2:
-		  PRZOD(); //funkcja nadajaca keirunek jazdy robota do przodu
-		  printf("Jazda do przodu\n");
-		  drive = 10;
-		  break;
-	  case 3:
-		  //Zmiana wartości wypełnienia (-10)
-		  printf("Wypelnienie: %d\n", speed);
-		  drive = 10;
-		  break;
-	  case 4:
-		  LEWA(); //funkcja nadajaca keirunek jazdy robota w lewo
-		  printf("Jazda w lewo\n");
-		  drive = 10;
-		  break;
-	  case 5:
-		  //speed=50; //ustawienie wypelnienia na wartosc poczatkowa (50)
-		  //printf("Wypelnienie: 50\n");
-		  STOP();
-		  if (automat == false){
-			  STOP();
-			  automat = true;
-			  printf("Dokowanie -> ON\n");
-		  }else{
-			  STOP();
-			  automat = false;
-			  left = false;
-			  left_center = false;
-			  center = false;
-			  right_center = false;
-			  right = false;
-			  printf("Dokowanie -> OFF\n");
-		  }
-
-		  //printf("Automat ON/OFF\n");
-		  drive = 10;
-		  break;
-	  case 6:
-		  PRAWA(); //funkcja nadajaca keirunek jazdy robota w prawo
-		  printf("Jazda w prawo\n");
-		  drive = 10;
-		  break;
-	  case 7:
-		  OBROT_L(); //funkcja powodujaca rotacje robota w lewo
-		  printf("Obrot w lewo\n");
-		  drive = 10;
-		  break;
-	  case 8:
-		  TYL(); //funkcja nadajaca keirunek jazdy robota do tylu
-		  printf("Jazda do tylu\n");
-		  drive = 10;
-		  break;
-	  case 9:
-		  OBROT_P(); //funkcja powodujaca rotacje robota w prawo
-		  printf("Obrot w prawo\n");
-		  drive = 10;
-		  break;
-	  default:
-		  break;
-	  }
-*/
-
-	  if (automat == true)
+	  if (DOCKING == true)
 	  {
 		  if (rec_left == true && rec_right == true && distance_left < 12 && distance_right > distance_left && STATION == false)
 		  {
@@ -691,7 +446,7 @@ int main(void)
 			  if (speed != 40)
 			  {
 				  STOP();
-				  OBROT_L();
+				  SPIN_L();
 				  //zwiekszenie predkosci x4
 				  speed = 40;
 				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
@@ -723,7 +478,7 @@ int main(void)
 			  if (speed != 40)
 			  {
 				  STOP();
-				  OBROT_P();
+				  SPIN_R();
 				  //zwiekszenie predkosci x4
 				  speed = 40;
 				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
@@ -755,7 +510,7 @@ int main(void)
 			  if (speed != 40)
 			  {
 				  STOP();
-				  LEWA();
+				  LEFT();
 				  //zwiekszenie predkosci x4
 				  speed = 40;
 				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
@@ -787,7 +542,7 @@ int main(void)
 			  if (speed != 40)
 			  {
 				  STOP();
-				  PRAWA();
+				  RIGHT();
 				  //zwiekszenie predkosci x4
 				  speed = 40;
 				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
@@ -819,7 +574,7 @@ int main(void)
 			  if (speed != 40)
 			  {
 				  STOP();
-				  PRZOD();
+				  FORWARD();
 				  //zwiekszenie predkosci x3
 				  speed = 40;
 				  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_10, GPIO_PIN_SET);
